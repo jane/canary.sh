@@ -222,10 +222,12 @@ increment_traffic() {
 }
 
 copy_resources() {
-  log="[$canarysh ${FUNCNAME[0]}]"
-  # Replace old deployment name with new
-  $_sed -Ei -- "s/name\: $prod_deployment/name: $canary_deployment/g" "$working_dir/canary_deployment.yml"
-  echo "$log Replaced deployment name"
+#  # removed this step as the next one takes care of it, and using both creates
+#  # a breaking edge case when current version is substr of version.
+#  log="[$canarysh ${FUNCNAME[0]}]"
+#  # Replace old deployment name with new
+#  $_sed -Ei -- "s/name\: $prod_deployment/name: $canary_deployment/g" "$working_dir/canary_deployment.yml"
+#  echo "$log Replaced deployment name"
 
   # Replace docker image
   $_sed -Ei -- "s/$current_version/$VERSION/g" "$working_dir/canary_deployment.yml"
