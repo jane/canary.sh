@@ -214,7 +214,7 @@ increment_traffic() {
   time=0
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
     sleep 2
-    time+=2
+    time=$((time+2))
     if [ "$time" -gt "300" ]; then
       cancel "timeout scaling up"
       exit 1
@@ -225,7 +225,7 @@ increment_traffic() {
   time=0
   while [ "$(kubectl get pods -l app="$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
     sleep 2
-    time+=2
+    time=$((time+2))
     if [ "$time" -gt "60" ]; then
       cancel "timeout scaling down"
       exit 1
@@ -315,7 +315,7 @@ main() {
   time=0
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
     sleep 2
-    time+=2
+    time=$((time+2))
     if [ "$time" -gt "600" ]; then
       cancel "timeout deploying first replica"
       exit 1
