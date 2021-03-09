@@ -180,7 +180,6 @@ increment_traffic() {
   percent=$1
   max_replicas=$2
 
-  echo "$log Increasing canaries by $percent percent, max replicas is $max_replicas"
 
   prod_replicas=$(kubectl get deployment \
     "$prod_deployment" \
@@ -190,8 +189,6 @@ increment_traffic() {
   canary_replicas=$(kubectl get deployment \
     "$canary_deployment" \
     -n "$NAMESPACE" -o=jsonpath='{.spec.replicas}')
-
-  echo "$log Production now has $prod_replicas replicas, canary has $canary_replicas replicas"
 
   # This gets the floor for pods, 2.69 will equal 2
   increment=$(((percent*max_replicas*100)/(100-percent)/100))
@@ -217,10 +214,15 @@ increment_traffic() {
   echo "$log Setting production replicas to $new_prod_replicas"
   kubectl -n "$NAMESPACE" scale --replicas=$new_prod_replicas "deploy/$prod_deployment"
 
-  # Wait a bit until production instances are down.
-  sleep 20
-  #
-  kubectl -n "$NAMESPACE" rollout status "deployment/$prod_deployment"
+  # Verify scaling is where we expect
+  while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
+    sleep 2
+  done
+  echo "$log Success:         canary replicas = $new_canary_replicas"
+  while [ "$(kubectl get pods -l app="$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
+    sleep 2
+  done
+  echo "$log Success: old production replicas = $new_prod_replicas"
 }
 
 copy_resources() {
@@ -285,14 +287,22 @@ main() {
   log="[$canarysh ${FUNCNAME[0]}]"
   starting_replicas=$(kubectl get deployment "$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.spec.replicas}')
   echo "$log Found replicas $starting_replicas"
-
+  echo "$log calculating increment..."
+  
+  # find increment float, convert to int(floor), and round up to 1 if needed
+  pod_increment=$((TRAFFIC_INCREMENT*starting_replicas/100))
+  pod_increment=${pod_increment%.*}
+  if [ "$pod_increment" -lt "1" ]; then
+    pod_increment=1
+  fi
+  echo "$log pods will be incremented by $pod_increment"
   # Launch one replica first
   $_sed -Ei -- "s#replicas: $starting_replicas#replicas: 1#g" "$working_dir/canary_deployment.yml"
   echo "$log Launching 1 pod with canary"
   kubectl apply -f "$working_dir/canary_deployment.yml" -n "$NAMESPACE"
 
   echo "$log Waiting for canary pod"
-  while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" --no-headers | wc -l)" -eq 0 ]; do
+  while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
     sleep 2
   done
 
@@ -300,21 +310,21 @@ main() {
 
   healthcheck
   log="[$canarysh ${FUNCNAME[0]}]"
+
+  echo "$log Increasing canaries by $TRAFFIC_INCREMENT percent increments, max replicas is $starting_replicas"
   while true; do
     p=$((p + "$TRAFFIC_INCREMENT"))
     if [ "$p" -gt "100" ]; then
       p=100
     fi
     echo "$log Rollout is at $p percent"
-
-    increment_traffic "$TRAFFIC_INCREMENT" "$starting_replicas"
-    log="[$canarysh ${FUNCNAME[0]}]"
     if [ "$p" == "100" ]; then
       cleanup
       echo "$log Done"
       exit 0
     fi
-
+    increment_traffic "$TRAFFIC_INCREMENT" "$starting_replicas"
+    log="[$canarysh ${FUNCNAME[0]}]"
     echo "$log Sleeping for $INTERVAL seconds"
     sleep "$INTERVAL"
     healthcheck
