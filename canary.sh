@@ -212,10 +212,12 @@ increment_traffic() {
   # Verify scaling is where we expect
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
     sleep 2
+    echo -n "."
   done
   echo "$log Success:         canary replicas = $new_canary_replicas"
   while [ "$(kubectl get pods -l app="$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
     sleep 2
+    echo -n "."
   done
   echo "$log Success: old production replicas = $new_prod_replicas"
 }
@@ -296,11 +298,12 @@ main() {
   echo "$log Launching 1 pod with canary"
   kubectl apply -f "$working_dir/canary_deployment.yml" -n "$NAMESPACE"
 
-  echo "$log Waiting for canary pod"
+  echo -n "$log Waiting for canary pod"
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
     sleep 2
+    echo -n "."
   done
-
+  echo ''
   echo "$log Canary target replicas: $starting_replicas"
 
   healthcheck
