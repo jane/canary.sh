@@ -177,7 +177,7 @@ cleanup() {
 
 increment_traffic() {
   log="[$canarysh ${FUNCNAME[0]}]"
-  percent=$1
+  increment=$1
   max_replicas=$2
 
 
@@ -189,11 +189,6 @@ increment_traffic() {
   canary_replicas=$(kubectl get deployment \
     "$canary_deployment" \
     -n "$NAMESPACE" -o=jsonpath='{.spec.replicas}')
-
-  # This gets the floor for pods, 2.69 will equal 2
-  increment=$(((percent*max_replicas*100)/(100-percent)/100))
-
-  echo "$log Incrementing canary and decreasing production for $increment replicas"
 
   new_prod_replicas=$((prod_replicas-increment))
   # Sanity check
@@ -288,7 +283,7 @@ main() {
   starting_replicas=$(kubectl get deployment "$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.spec.replicas}')
   echo "$log Found replicas $starting_replicas"
   echo "$log calculating increment..."
-  
+
   # find increment float, convert to int(floor), and round up to 1 if needed
   pod_increment=$((TRAFFIC_INCREMENT*starting_replicas/100))
   pod_increment=${pod_increment%.*}
@@ -311,19 +306,14 @@ main() {
   healthcheck
   log="[$canarysh ${FUNCNAME[0]}]"
 
-  echo "$log Increasing canaries by $TRAFFIC_INCREMENT percent increments, max replicas is $starting_replicas"
+  echo "$log scaling canaries to $starting_replicas by increments of $pod_increment"
   while true; do
-    p=$((p + "$TRAFFIC_INCREMENT"))
-    if [ "$p" -gt "100" ]; then
-      p=100
-    fi
-    echo "$log Rollout is at $p percent"
-    if [ "$p" == "100" ]; then
+    if [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ge "$starting_replicas" ]; then
       cleanup
       echo "$log Done"
       exit 0
     fi
-    increment_traffic "$TRAFFIC_INCREMENT" "$starting_replicas"
+    increment_traffic "$pod_increment" "$starting_replicas"
     log="[$canarysh ${FUNCNAME[0]}]"
     echo "$log Sleeping for $INTERVAL seconds"
     sleep "$INTERVAL"
