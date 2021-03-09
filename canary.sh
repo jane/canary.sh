@@ -124,7 +124,7 @@ healthcheck() {
   fi
 
   if [ ! $h == true ]; then
-    cancel
+    cancel "Healthcheck failed; canceling rollout"
     echo "$log Canary is unhealthy"
   else
     echo "$log Service healthy"
@@ -133,7 +133,8 @@ healthcheck() {
 
 cancel() {
   log="[$canarysh ${FUNCNAME[0]}]"
-  echo "$log Healthcheck failed; canceling rollout"
+  message=$1
+  echo "$log $message"
 
   if [ -n "$ON_FAILURE" ]; then
     # We don't want to break our script if their thing fails
@@ -143,7 +144,7 @@ cancel() {
     set -e
   fi
 
-  echo "$log Healthcheck failed; canceling rollout"
+  echo "$log $message"
 
   echo "$log Restoring original deployment to $prod_deployment"
   kubectl apply \
@@ -210,13 +211,25 @@ increment_traffic() {
   kubectl -n "$NAMESPACE" scale --replicas=$new_prod_replicas "deploy/$prod_deployment"
 
   # Verify scaling is where we expect
+  time=0
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
     sleep 2
+    time+=2
+    if [ "$time" -gt "300" ]; then
+      cancel "timeout scaling up"
+      exit 1
+    fi
     echo -n "."
   done
   echo "$log Success:         canary replicas = $new_canary_replicas"
+  time=0
   while [ "$(kubectl get pods -l app="$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
     sleep 2
+    time+=2
+    if [ "$time" -gt "60" ]; then
+      cancel "timeout scaling down"
+      exit 1
+    fi
     echo -n "."
   done
   echo "$log Success: old production replicas = $new_prod_replicas"
@@ -299,8 +312,14 @@ main() {
   kubectl apply -f "$working_dir/canary_deployment.yml" -n "$NAMESPACE"
 
   echo -n "$log Waiting for canary pod"
+  time=0
   while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
     sleep 2
+    time+=2
+    if [ "$time" -gt "600" ]; then
+      cancel "timeout deploying first replica"
+      exit 1
+    fi
     echo -n "."
   done
   echo ''
