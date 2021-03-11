@@ -212,7 +212,7 @@ increment_traffic() {
 
   # Verify scaling is where we expect
   time=0
-  while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
+  while [ "$(kubectl get deploy "$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_canary_replicas" ]; do
     sleep 2
     time=$((time+2))
     if [ "$time" -gt "300" ]; then
@@ -223,7 +223,7 @@ increment_traffic() {
   done
   echo "$log Success:         canary replicas = $new_canary_replicas"
   time=0
-  while [ "$(kubectl get pods -l app="$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
+  while [ "$(kubectl get deploy "$prod_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ne "$new_prod_replicas" ]; do
     sleep 2
     time=$((time+2))
     if [ "$time" -gt "60" ]; then
@@ -313,7 +313,7 @@ main() {
 
   echo -n "$log Waiting for canary pod"
   time=0
-  while [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
+  while [ "$(kubectl get deploy "$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -eq 0 ]; do
     sleep 2
     time=$((time+2))
     if [ "$time" -gt "600" ]; then
@@ -330,7 +330,7 @@ main() {
 
   echo "$log scaling canaries to $starting_replicas by increments of $pod_increment"
   while true; do
-    if [ "$(kubectl get pods -l app="$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ge "$starting_replicas" ]; then
+    if [ "$(kubectl get deploy "$canary_deployment" -n "$NAMESPACE" -o=jsonpath='{.status.readyReplicas}')" -ge "$starting_replicas" ]; then
       cleanup
       echo "$log Done"
       exit 0
