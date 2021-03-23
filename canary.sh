@@ -325,13 +325,25 @@ main() {
   time=0
   #check to make sure everything is set up correctly for our query to return a number
   isNumber='^[0-9]+$'
+
+  while [ -z "$(kubectl get deploy "$canary_deployment" -o=jsonpath='{.status.availableReplicas}')" ]; do
+    sleep 2
+    time=$((time+2))
+    if [ "$time" -gt "600" ]; then
+      cancel "timeout waiting for k8s deploy to build"
+      exit 1
+    fi
+    echo -n "."
+  done
   kubectlResult="$(kubectl get deploy "$canary_deployment" -o=jsonpath='{.status.availableReplicas}')"
   if ! [[ $kubectlResult =~ $isNumber ]]; then
     echo "$log kubectl expected a numbered response, instead got:"
     echo "$log $kubectlResult"
     echo "$log Aborting"
+    cancel "non-numbered kubectl response"
     exit 1
   fi
+  time=0
   while [ "$(kubectl get deploy "$canary_deployment" -o=jsonpath='{.status.availableReplicas}')" -eq 0 ]; do
     sleep 2
     time=$((time+2))
