@@ -155,13 +155,14 @@ cancel() {
   echo "$log Removing canary deployment completely"
   kubectl delete deployment "$canary_deployment"
 
+  echo "$log Restoring previous HPA"
+  kubectl apply -f "$working_dir/original_hpa.yml"
+
   exit 1
 }
 
 cleanup() {
   log="[$canarysh ${FUNCNAME[0]}]"
-  echo "$log Removing previous HPA"
-  kubectl delete -f "$working_dir/canary_hpa.yml"
 
   echo "$log Applying new HPA"
   kubectl apply -f "$working_dir/canary_hpa.yml"
@@ -307,6 +308,10 @@ main() {
   log="[$canarysh ${FUNCNAME[0]}]"
   starting_replicas=$(kubectl get deployment "$prod_deployment" -o=jsonpath='{.spec.replicas}')
   echo "$log Found replicas $starting_replicas"
+
+  echo "$log Removing previous HPA"
+  kubectl delete -f "$working_dir/canary_hpa.yml"
+
   echo "$log calculating increment..."
 
   # find increment float, convert to int(floor), and round up to 1 if needed
